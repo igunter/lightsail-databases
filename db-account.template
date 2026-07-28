@@ -1,0 +1,5 @@
+DBNAME="..."
+DBUSER="..."
+HOST_SCOPE="%"
+STATUS="active"
+CREATED="YYYY-MM-DD"

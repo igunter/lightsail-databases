@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+#
+# MySQL Accounts - restore a database user's access.
+#
+# Usage: sudo bash restore.sh
+# Can be run directly, or is invoked by index.sh's "Restore Access" option.
+
+set -euo pipefail
+
+MYSQL_ADMIN_CNF="${MYSQL_ADMIN_CNF:-/root/.my.cnf}"
+MYSQL_BIN="${MYSQL_BIN:-mysql}"
+META_DIR="/etc/mysql-accounts/databases"
+DBNAME_RE='^[a-zA-Z_][a-zA-Z0-9_]{0,62}$'
+
+require_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "This script must be run as root (try: sudo bash restore.sh)."
+        exit 1
+    fi
+}
+
+ensure_mysql_admin_creds() {
+    if [ ! -f "$MYSQL_ADMIN_CNF" ]; then
+        echo "MySQL admin credentials file not found at ${MYSQL_ADMIN_CNF}."
+        exit 1
+    fi
+    chmod 600 "$MYSQL_ADMIN_CNF"
+}
+
+read_account_meta() {
+    local meta_path="${META_DIR}/${DBNAME}.account"
+
+    DBUSER="-"
+    HOST_SCOPE="%"
+    STATUS="unknown"
+    CREATED="-"
+
+    if [ -f "$meta_path" ]; then
+        # shellcheck disable=SC1090
+        source "$meta_path"
+    fi
+}
+
+write_account_meta() {
+    local meta_path="${META_DIR}/${DBNAME}.account"
+    cat > "$meta_path" <<EOF
+DBNAME="${DBNAME}"
+DBUSER="${DBUSER}"
+HOST_SCOPE="${HOST_SCOPE}"
+STATUS="active"
+CREATED="${CREATED}"
+EOF
+    chmod 600 "$meta_path"
+}
+
+prompt_database_name() {
+    while true; do
+        read -rp "Database name to restore: " DBNAME
+        if [[ ! "$DBNAME" =~ $DBNAME_RE ]]; then
+            echo "Invalid database name."
+            continue
+        fi
+        if [ ! -f "${META_DIR}/${DBNAME}.account" ]; then
+            echo "No metadata found for '${DBNAME}'."
+            continue
+        fi
+        read_account_meta
+        if [ "$STATUS" != "revoked" ]; then
+            echo "Database '${DBNAME}' is not revoked."
+            continue
+        fi
+        break
+    done
+}
+
+mysql_supports_account_lock() {
+    local version
+    version="$($MYSQL_BIN --defaults-extra-file="$MYSQL_ADMIN_CNF" --batch --skip-column-names -e "SELECT VERSION();" 2>/dev/null | head -n 1 | tr -d '[:space:]')"
+    if [[ "$version" =~ ^8\. ]] || [[ "$version" =~ ^10\.(4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30) ]] || [[ "$version" =~ ^11\. ]]; then
+        return 0
+    fi
+    return 1
+}
+
+restore_access() {
+    require_root
+    ensure_mysql_admin_creds
+    prompt_database_name
+
+    if mysql_supports_account_lock; then
+        "$MYSQL_BIN" --defaults-extra-file="$MYSQL_ADMIN_CNF" -e "ALTER USER '${DBUSER}'@'${HOST_SCOPE}' ACCOUNT UNLOCK; FLUSH PRIVILEGES;"
+    else
+        "$MYSQL_BIN" --defaults-extra-file="$MYSQL_ADMIN_CNF" -e "GRANT ALL PRIVILEGES ON \`${DBNAME}\`.* TO '${DBUSER}'@'${HOST_SCOPE}'; FLUSH PRIVILEGES;"
+    fi
+
+    write_account_meta
+
+    echo ""
+    echo "Access for '${DBNAME}' restored."
+    echo "  User: ${DBUSER}"
+    echo "  Status: active"
+}
+
+# Allow this script to be sourced (e.g. by index.sh) without auto-running.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    restore_access
+fi
