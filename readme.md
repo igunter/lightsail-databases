@@ -26,7 +26,7 @@ cd /mysql-accounts && sudo git pull && sudo bash index.sh
 
 ## Security Notes
 
-- The scripts use a root/admin MySQL credentials file such as /root/.my.cnf with 600 permissions. They do not prompt for root database credentials on every run.
+- The scripts use a root/admin MySQL credentials file such as /root/.my.cnf with 600 permissions. They do not prompt for root database credentials on every run. If this file doesn't exist yet, any script will prompt you once for the MySQL admin username/password, verify it connects, and save it to /root/.my.cnf (600 permissions) so you aren't asked again.
 - The database user's password is only shown once at creation time. It is not written into the metadata sidecar file.
 - The default host scope is % for compatibility, but you can change it to a specific IP or host if you want to restrict access.
 

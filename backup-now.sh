@@ -19,10 +19,36 @@ require_root() {
     fi
 }
 
+bootstrap_mysql_admin_creds() {
+    echo "MySQL admin credentials file not found at ${MYSQL_ADMIN_CNF}."
+    echo "Let's set it up now - these credentials will be saved so you aren't asked again."
+    local admin_user admin_password
+
+    read -rp "MySQL admin username [root]: " admin_user
+    admin_user="${admin_user:-root}"
+
+    while true; do
+        read -rsp "MySQL admin password: " admin_password
+        echo ""
+        if MYSQL_PWD="$admin_password" "$MYSQL_BIN" --user="$admin_user" --batch --skip-column-names -e "SELECT 1;" >/dev/null 2>&1; then
+            break
+        fi
+        echo "Could not connect with those credentials. Please try again."
+    done
+
+    mkdir -p "$(dirname "$MYSQL_ADMIN_CNF")"
+    cat > "$MYSQL_ADMIN_CNF" <<EOF
+[client]
+user=${admin_user}
+password=${admin_password}
+EOF
+    chmod 600 "$MYSQL_ADMIN_CNF"
+    echo "Saved MySQL admin credentials to ${MYSQL_ADMIN_CNF}."
+}
+
 ensure_mysql_admin_creds() {
     if [ ! -f "$MYSQL_ADMIN_CNF" ]; then
-        echo "MySQL admin credentials file not found at ${MYSQL_ADMIN_CNF}."
-        exit 1
+        bootstrap_mysql_admin_creds
     fi
     chmod 600 "$MYSQL_ADMIN_CNF"
 }

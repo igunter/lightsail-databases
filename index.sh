@@ -14,12 +14,41 @@ require_root() {
     fi
 }
 
-list_databases() {
-    if [ ! -f "$MYSQL_ADMIN_CNF" ]; then
-        echo "MySQL admin credentials file not found at ${MYSQL_ADMIN_CNF}."
-        return 1
-    fi
+bootstrap_mysql_admin_creds() {
+    echo "MySQL admin credentials file not found at ${MYSQL_ADMIN_CNF}."
+    echo "Let's set it up now - these credentials will be saved so you aren't asked again."
+    local admin_user admin_password
 
+    read -rp "MySQL admin username [root]: " admin_user
+    admin_user="${admin_user:-root}"
+
+    while true; do
+        read -rsp "MySQL admin password: " admin_password
+        echo ""
+        if MYSQL_PWD="$admin_password" "$MYSQL_BIN" --user="$admin_user" --batch --skip-column-names -e "SELECT 1;" >/dev/null 2>&1; then
+            break
+        fi
+        echo "Could not connect with those credentials. Please try again."
+    done
+
+    mkdir -p "$(dirname "$MYSQL_ADMIN_CNF")"
+    cat > "$MYSQL_ADMIN_CNF" <<EOF
+[client]
+user=${admin_user}
+password=${admin_password}
+EOF
+    chmod 600 "$MYSQL_ADMIN_CNF"
+    echo "Saved MySQL admin credentials to ${MYSQL_ADMIN_CNF}."
+}
+
+ensure_mysql_admin_creds() {
+    if [ ! -f "$MYSQL_ADMIN_CNF" ]; then
+        bootstrap_mysql_admin_creds
+    fi
+    chmod 600 "$MYSQL_ADMIN_CNF"
+}
+
+list_databases() {
     local databases
     databases="$($MYSQL_BIN --defaults-extra-file="$MYSQL_ADMIN_CNF" -N -e "SHOW DATABASES;" 2>/dev/null | tr '\n' ' ')"
     if [ -z "$databases" ]; then
@@ -110,6 +139,7 @@ show_menu() {
 
 main() {
     require_root
+    ensure_mysql_admin_creds
 
     while true; do
         show_menu
