@@ -6,6 +6,7 @@
 MYSQL_ADMIN_CNF="${MYSQL_ADMIN_CNF:-/root/.my.cnf}"
 MYSQL_BIN="${MYSQL_BIN:-mysql}"
 META_DIR="/etc/mysql-accounts/databases"
+SYSTEM_SCHEMAS="information_schema mysql performance_schema sys"
 
 require_root() {
     if [ "$(id -u)" -ne 0 ]; then
@@ -64,6 +65,9 @@ list_databases() {
         if [ "$db" = "Database" ]; then
             continue
         fi
+        case " $SYSTEM_SCHEMAS " in
+            *" $db "*) continue ;;
+        esac
         local meta_path="${META_DIR}/${db}.account"
         local dbuser="-"
         local status="unknown"
