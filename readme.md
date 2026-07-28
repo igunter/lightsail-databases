@@ -9,7 +9,7 @@ Connect to your server in a terminal window (Putty, Terminal, etc.) and run the 
 If this is the first time you are running this script, then you need to run the following command:
 
 ```bash
-sudo git clone https://github.com/igunter/lightsail-databases.git /mysql-accounts && cd /mysql-accounts && sudo bash seed-accounts.sh && sudo bash index.sh
+sudo git clone https://github.com/igunter/lightsail-databases.git /mysql-accounts && cd /mysql-accounts && sudo bash seed-db-accounts.sh && sudo bash index.sh
 ```
 
 Otherwise run:
