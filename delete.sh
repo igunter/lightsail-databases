@@ -70,7 +70,12 @@ read_account_meta() {
     fi
 }
 
+database_exists() {
+    "$MYSQL_BIN" --defaults-extra-file="$MYSQL_ADMIN_CNF" --batch --skip-column-names -e "SHOW DATABASES LIKE '${1}';" 2>/dev/null | grep -Fxq "$1"
+}
+
 prompt_database_name() {
+    ORPHAN_DATABASE=0
     while true; do
         read -rp "Database name to delete: " DBNAME
         if [[ ! "$DBNAME" =~ $DBNAME_RE ]]; then
@@ -78,7 +83,16 @@ prompt_database_name() {
             continue
         fi
         if [ ! -f "${META_DIR}/${DBNAME}.account" ]; then
-            echo "No metadata found for '${DBNAME}'."
+            if database_exists "$DBNAME"; then
+                echo "No metadata found for '${DBNAME}'."
+                echo "This is an unmanaged database. It can only be deleted as an orphan."
+                DBUSER="-"
+                HOST_SCOPE="%"
+                STATUS="orphan"
+                ORPHAN_DATABASE=1
+                break
+            fi
+            echo "No metadata found for '${DBNAME}', and the database does not exist."
             continue
         fi
         read_account_meta
@@ -96,7 +110,11 @@ confirm_deletion() {
     echo "  User: ${DBUSER}"
     echo "  Metadata: ${META_DIR}/${DBNAME}.account"
     echo ""
-    echo "This will create a backup, drop the database, and drop the dedicated database user."
+    if [ "$ORPHAN_DATABASE" -eq 1 ]; then
+        echo "No metadata is available, so this will create a backup and drop only the database."
+    else
+        echo "This will create a backup, drop the database, and drop the dedicated database user."
+    fi
     read -rp "Type '${DBNAME}' to confirm permanent deletion: " confirm_input
     if [ "$confirm_input" != "$DBNAME" ]; then
         echo "Confirmation did not match. Aborting - nothing was deleted."
@@ -125,7 +143,11 @@ queue_backup_cleanup() {
 }
 
 drop_database_and_user() {
-    "$MYSQL_BIN" --defaults-extra-file="$MYSQL_ADMIN_CNF" -e "DROP USER '${DBUSER}'@'${HOST_SCOPE}'; DROP DATABASE \`${DBNAME}\`; FLUSH PRIVILEGES;"
+    if [ "$ORPHAN_DATABASE" -eq 1 ]; then
+        "$MYSQL_BIN" --defaults-extra-file="$MYSQL_ADMIN_CNF" -e "DROP DATABASE \`${DBNAME}\`;"
+    else
+        "$MYSQL_BIN" --defaults-extra-file="$MYSQL_ADMIN_CNF" -e "DROP USER '${DBUSER}'@'${HOST_SCOPE}'; DROP DATABASE \`${DBNAME}\`; FLUSH PRIVILEGES;"
+    fi
     rm -f "${META_DIR}/${DBNAME}.account"
 }
 

@@ -128,9 +128,17 @@ user_exists() {
 }
 
 create_database_and_user() {
-    "$MYSQL_BIN" --defaults-extra-file="$MYSQL_ADMIN_CNF" -e "CREATE DATABASE \`${DBNAME}\`;"
-    "$MYSQL_BIN" --defaults-extra-file="$MYSQL_ADMIN_CNF" -e "CREATE USER '${DBUSER}'@'${HOST_SCOPE}' IDENTIFIED BY '${DBPASSWORD}';"
-    "$MYSQL_BIN" --defaults-extra-file="$MYSQL_ADMIN_CNF" -e "GRANT ALL PRIVILEGES ON \`${DBNAME}\`.* TO '${DBUSER}'@'${HOST_SCOPE}'; FLUSH PRIVILEGES;"
+    if ! "$MYSQL_BIN" --defaults-extra-file="$MYSQL_ADMIN_CNF" -e "CREATE DATABASE \`${DBNAME}\`;"; then
+        return 1
+    fi
+    if ! "$MYSQL_BIN" --defaults-extra-file="$MYSQL_ADMIN_CNF" -e "CREATE USER '${DBUSER}'@'${HOST_SCOPE}' IDENTIFIED BY '${DBPASSWORD}';"; then
+        "$MYSQL_BIN" --defaults-extra-file="$MYSQL_ADMIN_CNF" -e "DROP DATABASE IF EXISTS \`${DBNAME}\`;" || true
+        return 1
+    fi
+    if ! "$MYSQL_BIN" --defaults-extra-file="$MYSQL_ADMIN_CNF" -e "GRANT ALL PRIVILEGES ON \`${DBNAME}\`.* TO '${DBUSER}'@'${HOST_SCOPE}'; FLUSH PRIVILEGES;"; then
+        "$MYSQL_BIN" --defaults-extra-file="$MYSQL_ADMIN_CNF" -e "DROP USER IF EXISTS '${DBUSER}'@'${HOST_SCOPE}'; DROP DATABASE IF EXISTS \`${DBNAME}\`;" || true
+        return 1
+    fi
 }
 
 write_account_meta() {
@@ -154,8 +162,15 @@ create_account() {
     prompt_password
     prompt_host_scope
 
-    create_database_and_user
-    write_account_meta
+    if ! create_database_and_user; then
+        echo "Database creation failed; any partial database/user was removed."
+        return 1
+    fi
+    if ! write_account_meta; then
+        "$MYSQL_BIN" --defaults-extra-file="$MYSQL_ADMIN_CNF" -e "DROP USER IF EXISTS '${DBUSER}'@'${HOST_SCOPE}'; DROP DATABASE IF EXISTS \`${DBNAME}\`;" || true
+        echo "Could not write metadata; the database and user were removed."
+        return 1
+    fi
 
     echo ""
     echo "Database '${DBNAME}' created."

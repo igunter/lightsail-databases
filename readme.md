@@ -53,6 +53,8 @@ This option runs create.sh and asks you for:
 
 It then creates the database, creates a dedicated database user, grants privileges for that database only, writes a metadata file in /etc/mysql-accounts/databases/<dbname>.account, and prints the password once for you to keep securely.
 
+If account creation fails after the database has been created, the script removes the partial database and user so it cannot be left without metadata.
+
 ### Revoke Access
 
 This option runs revoke.sh. It prompts for the database name and then blocks the database user from connecting by revoking privileges or locking the account when the server supports it. The metadata status is changed to revoked.
@@ -63,7 +65,9 @@ This option runs restore.sh. It prompts for the database name and restores the u
 
 ### Delete Database
 
-This option runs delete.sh. The database must already have its access revoked before deletion is allowed. You will be shown a summary and must type the database name again to confirm. Then the script creates a backup, queues the backup for later cleanup, drops the database user, and drops the database.
+This option runs delete.sh. A managed database must already have its access revoked before deletion is allowed. You will be shown a summary and must type the database name again to confirm. Then the script creates a backup, queues the backup for later cleanup, drops the database user, and drops the database.
+
+If a database exists but has no metadata file, delete.sh identifies it as an unmanaged database and offers a separately confirmed orphan cleanup. That cleanup backs up and drops only the database; it does not guess which MySQL user should be removed.
 
 #### Backup cleanup (cleanup-backups.sh)
 
